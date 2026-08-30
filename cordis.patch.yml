@@ -1,0 +1,4 @@
+# Profile Bundle layer for the AI novel production studio.
+- insert:
+    - id: novel-studio
+      name: 'dsh-novel-studio'

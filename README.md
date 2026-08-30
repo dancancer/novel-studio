@@ -19,6 +19,8 @@ Agent Loop：执行 → 失败数据 → 根因分析 → 能力优化 → HR �
 
 ```
 novel-studio/
+├── package.json              # DSH Profile Bundle 清单
+├── cordis.patch.yml          # Bundle 的 Cordis 配置层
 ├── plugin/                  # DSH 主机侧插件（Cordis）
 │   ├── index.mjs            # 入口：注册 24 个 novel_* 工具
 │   ├── operators.mjs        # 工具实现层（阶段编排 / Context Builder / Autopilot）
@@ -33,17 +35,42 @@ novel-studio/
 └── docs/DESIGN.md           # 设计文档 → 实现的逐节映射
 ```
 
-## 安装（一次）
+## 安装（Profile Bundle）
 
-1. 插件已通过用户补丁层接入运行中的 GUI（`~/.dsh/profiles/web/cordis.patch.yml`）。
-2. **重启 GUI**（补丁热重载在当前构建不可用，重启后生效）：
+发布到 npm 后，其他用户可以直接安装：
+
+```sh
+dsh plugin --profile web add dsh-novel-studio
+```
+
+如果只发布到 GitHub：
+
+```sh
+dsh plugin --profile web add github:OWNER/dsh-novel-studio
+```
+
+`dsh plugin` 会把包记录到 `web` profile，并自动启用它的 `dsh.bundle` 配置层。
+安装或更新后需要**重启 GUI**（当前构建的补丁热重载不可用）：
 
 ```sh
 launchctl kickstart -k gui/$(id -u)/com.xupeng.deepseek-harness.web
 ```
 
-3. 刷新 `http://127.0.0.1:3080`。重启后聊天中输入“用 novel 工具开一个写书项目”，
-   Agent 即可调用 24 个 `novel_*` 工具（启动标记见 `/tmp/novel-studio-boot.log`）。
+刷新 `http://127.0.0.1:3080`，新建会话后输入“用 novel 工具开一个写书项目”，
+Agent 即可调用 24 个 `novel_*` 工具。
+
+### 本地开发接入
+
+不发布 npm 时，可将仓库放在本机任意目录，然后在
+`~/.dsh/profiles/web/cordis.patch.yml` 中加入本机绝对路径：
+
+```yaml
+- insert:
+    - id: novel-studio
+      name: '/绝对路径/novel-studio/plugin/index.mjs'
+```
+
+这种方式仅适合开发或内部测试；每台机器都必须修改为自己的路径。
 
 ## 使用流程（在 GUI 里与 Agent 对话即可）
 

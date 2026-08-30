@@ -79,7 +79,6 @@ export const ROLE_PERSONAS = {
         assumptions: { type: 'array', items: { type: 'string' }, description: '创作假设（Creative Assumption）清单' },
         sources: {
           type: 'array',
-          minItems: 1,
           items: {
             type: 'object',
             additionalProperties: false,
@@ -540,7 +539,7 @@ Reviewer/Reader 提供的是"症状"，你的任务是定位根因与返工层�
       properties: {
         rootCauses: { type: 'object', additionalProperties: true, description: '责任归属权重 { plot_architect: 0.4, writer: 0.2 }' },
         rollback_to: { type: 'string', enum: ['research', 'world_bible', 'character_arc', 'system_rules', 'master_plot', 'volume_plan', 'chapter_contract', 'writer', 'plot_payoff', 'reader_diagnosis'] },
-        impactSuggestion: { type: 'array', minItems: 2, maxItems: 2, items: { type: 'number' }, description: '受影响章节范围 [start, end]' },
+        impactSuggestion: { type: 'array', items: { type: 'number' }, description: '受影响章节范围 [start, end]' },
         rationale: { type: 'string', description: '诊断推理过程' },
       },
     },

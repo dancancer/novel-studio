@@ -3,7 +3,10 @@
  * ------------------------------------------------------------------
  * AI 小说工作室 —— DeepSeek Harness 主机侧插件。
  *
- * 接入方式：在 `~/.dsh/profiles/web/cordis.patch.yml`（用户补丁层，热重载）加入：
+ * 推荐接入方式：安装 `dsh-novel-studio` Profile Bundle：
+ *   dsh plugin --profile web add dsh-novel-studio
+ *
+ * 本地开发时，也可以在 `~/.dsh/profiles/web/cordis.patch.yml` 加入绝对路径：
  *
  *   - id: novel-studio
  *     name: '/Users/xupeng/mybase/novel-studio/plugin/index.mjs'

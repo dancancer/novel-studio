@@ -1004,7 +1004,7 @@ async function phasePlot(ctx, exec, projectDir, opts = {}) {
             properties: {
               dimension: { type: 'string', enum: [...plotDimensions] },
               severity: { type: 'string', enum: ['blocking', 'high', 'medium', 'low'] },
-              score: { type: 'number', minimum: 0, maximum: 100 },
+              score: { type: 'number' },
               veto: { type: 'boolean' },
               evidence: { type: 'string' },
               recommended_action: { type: 'string' },
