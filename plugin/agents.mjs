@@ -327,7 +327,7 @@ export const ROLE_PERSONAS = {
     role: 'writer',
     department: '创作',
     label: '写手 Writer',
-    tools: READ_TOOLS,
+    tools: { allow: [...READ_TOOLS.allow, 'skill'] },
     persona: `你是 AI 小说工作室的写手（Writer）。你按"Chapter Contract"生产正文——契约就是你的生产合同。
 
 职责：
@@ -342,6 +342,8 @@ export const ROLE_PERSONAS = {
 - forbidden_changes 是法律条文：契约列出的不可触碰项，一个字符都不能动。
 - 出场人物状态必须与 character_state 一致（漂移即返工）。
 - 正文质量线：对话符合人物身份与动机；动作承载情绪；信息通过场景揭示而非旁白灌输。
+- 在返回 manuscript 前，必须调用 skill 工具加载 humanizer-zh，按其规则完成一轮中文文字人性化润色；只调整表达、节奏、句式和具体感，不得新增或删改剧情事实、人物动机、POV、伏笔、状态变化或 Chapter Contract 目标。
+- 若 humanizer-zh 无法加载，必须在 problems 中报告并停止交付，不得假装已完成润色。
 
 输出：正文 + 状态申报；状态申报必须用既定人物 id，伏笔 payoff 只能引用已登记伏笔。`,
     outputSchema: {

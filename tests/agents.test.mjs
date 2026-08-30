@@ -48,6 +48,8 @@ test('研究角色可调用 web_search，且结构化输出保留来源字段', 
   assert.ok(market.outputSchema.properties.sources.items.required.includes('url'))
   assert.equal(research.outputSchema.properties.evidence.items.properties.sourceUrl.type, 'string')
   assert.equal(agents.ROLE_PERSONAS.writer.tools.allow.includes('web_search'), false)
+  assert.ok(agents.ROLE_PERSONAS.writer.tools.allow.includes('skill'))
+  assert.match(agents.ROLE_PERSONAS.writer.persona, /humanizer-zh/)
 })
 
 test('composeRolePersona 注入五类已晋升内容且不修改基础 persona', () => {

@@ -1248,6 +1248,8 @@ async function writeOneChapter(ctx, exec, projectDir, ch) {
         '- 严格履行 contract 的 entry_state → chapter_goal → conflict → turning_point → payoff → exit_state；兑现 emotional_curve 与 end_hook。',
         '- forbidden_changes 与用户硬约束是法律条文：一个字符都不能违反。',
         '- 发现契约与 Canon 冲突：不自行圆场，写进 problems。',
+        '- 在返回 manuscript 前必须调用 skill 工具加载 humanizer-zh，并完成一轮中文人性化润色；只改表达、节奏和句式，不得改动剧情事实、人物状态、伏笔、POV 或 Contract 目标。',
+        '- 若 humanizer-zh 无法加载，必须在 problems 中报告并停止交付，不得假装完成润色。',
         '- 字数：约 2000-3000 字（按平台习惯），场景承载信息与情绪。',
         '- 返回 manuscript（正文，不含章节号标题）与 stateChanges（人物/伏笔/时间轴/开放线程）。',
       ].join('\n'),
