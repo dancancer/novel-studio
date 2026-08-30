@@ -37,20 +37,23 @@ novel-studio/
 
 ## 安装（Profile Bundle）
 
-发布到 npm 后，其他用户可以直接安装：
+前提：已安装 DeepSeek Harness，并且 `dsh`、`pnpm` 已在 `PATH` 中。
+
+当前从 GitHub 安装：
+
+```sh
+dsh plugin --profile web add github:dancancer/novel-studio
+```
+
+将来发布到 npm 后，也可以直接安装：
 
 ```sh
 dsh plugin --profile web add dsh-novel-studio
 ```
 
-如果只发布到 GitHub：
-
-```sh
-dsh plugin --profile web add github:OWNER/dsh-novel-studio
-```
-
 `dsh plugin` 会把包记录到 `web` profile，并自动启用它的 `dsh.bundle` 配置层。
-安装或更新后需要**重启 GUI**（当前构建的补丁热重载不可用）：
+安装或更新后需要**退出并重启 DSH Web GUI**（当前构建的补丁热重载不可用）。
+macOS 当前本机也可以执行：
 
 ```sh
 launchctl kickstart -k gui/$(id -u)/com.xupeng.deepseek-harness.web
