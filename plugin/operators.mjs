@@ -657,7 +657,7 @@ async function phaseSetting(ctx, exec, projectDir) {
       '==== 人物 ====',
       JSON.stringify(mergedCharState).slice(0, 4000),
       '',
-      '返回：{ issues: [{ dimension, severity(blocking/high/medium/low), score, evidence, veto }], scores: { dimension: 0-100 } }',
+      '返回：{ issues: [{ dimension, severity(blocking/high/medium/low), score, evidence, veto }], scores: { world, plot, character, numbers, research, planner, other } }；scores 只允许这七个维度，值必须是 0-100 的 JSON number；不要把 planning_gate、veto、veto_reasons 等摘要字段放进 scores。',
     ].join('\n'),
     outputSchema: {
       type: 'object',
@@ -692,6 +692,8 @@ async function phaseSetting(ctx, exec, projectDir) {
       invalidScores.push('scores 必须是对象')
     } else {
       for (const [dimension, score] of Object.entries(scores)) {
+        // 模型有时会在 scores 中附带 planning_gate/veto 等摘要字段；Gate 只消费合法评分维度，缺失的合法维度仍由 runGate 判为输入不完整。
+        if (!planningScoreDimensions.includes(dimension)) continue
         if (!Number.isFinite(score) || score < 0 || score > 100) {
           invalidScores.push(`scores.${dimension}=${JSON.stringify(score)}`)
         }
