@@ -23,14 +23,24 @@ novel-studio/
 ├── cordis.patch.yml          # Bundle 的 Cordis 配置层
 ├── plugin/                  # DSH 主机侧插件（Cordis）
 │   ├── index.mjs            # 入口：注册 24 个 novel_* 工具
-│   ├── operators.mjs        # 工具实现层（阶段编排 / Context Builder / Autopilot）
+│   ├── operators.mjs        # 工具注册外壳与模块组装（保持对外入口稳定）
+│   ├── operator-registry.mjs # 24 个 novel_* 工具的定义与注册
+│   ├── operator-lock.mjs    # 项目级跨进程写锁
+│   ├── operator-common.mjs  # 阶段共用的项目/Agent/章节辅助接口
+│   ├── operator-planning.mjs # 研究、设定、剧情工程与 Planning/Plot Gate
+│   ├── operator-production.mjs # Context Builder、Writer 与状态回放
+│   ├── operator-quality.mjs # Reviewer Pool、Chapter Gate、Reader Lab
+│   ├── operator-governance.mjs # 诊断、返工、Learning、HR、报告
+│   ├── operator-autopilot.mjs # 状态机调度
+│   ├── operator-render.mjs  # 工具结果与项目状态渲染
+│   ├── writing-methodology.mjs # 世界/人物/剧情/正文/审查、连载工程方法与可配置文风
 │   ├── store.mjs            # 存储层：项目树 / Artifact 生命周期 / 状态存储 / 依赖图 / KPI
 │   ├── gates.mjs            # Gate 引擎：权重面 + 一票否决 + 关键指标
 │   ├── agents.mjs           # 15 个角色 persona + 子代理派发（ctx.subagents）
 │   ├── diagnosis.mjs        # 根因诊断 / 返工路由 / 影响分析
 │   ├── hr.mjs               # Agent 档案 / 成长候选 / HR 晋升与驳回
 │   └── reports.mjs          # Planner 周期汇报 / KPI
-├── tests/                   # 单元测试（node --test，116 例，零外部依赖）
+├── tests/                   # 单元测试（node --test，129 例，零外部依赖）
 ├── smoke/                   # 无头冒烟（16 例，不调 LLM）
 └── docs/DESIGN.md           # 设计文档 → 实现的逐节映射
 ```
@@ -146,6 +156,26 @@ targetWords=1000000
 volumeCount=3
 chaptersPerVolume=40
 chaptersPerBatch=10
+configurationMode=collaborative
+baseStyle=细腻
+narrativeDistance=限知
+sentenceRhythm=长短交错
+psychologyDensity=中
+dialogueTone=自然
+descriptionFocus=["动作", "对白", "环境"]
+rhetoricDensity=低至中
+tone=克制温暖
+pacingMode=balanced
+endingMode=悬念
+bannedWords=["需要长期回避的项目词"]
+serialMode=commercial_serial
+coreEmotionalPromise=能力成长与自我证明
+secondaryEmotionalPromises=["伙伴认可", "探索揭秘"]
+readerExpectations=["行动产生真实反馈", "阶段性资源与关系变化"]
+readerAvoidances=["只靠配角震惊", "长期只升级危机不兑现"]
+payoffCadence=每2-3章提供局部反馈，每10章完成一次阶段兑现
+planningHorizonWords=60000
+openingPerspective=follow_project_style
 hardConstraints=["主角不降智", "关键规则前后一致"]
 ```
 
@@ -153,6 +183,27 @@ hardConstraints=["主角不降智", "关键规则前后一致"]
 `<rootDir>/<projectId>`，并返回后续工具要使用的 `projectDir`。之后所有
 `novel_*` 调用都应继续使用这个 `projectDir`，不要把插件源码目录当成小说项目目录。
 每个小说项目会有自己的项目树和 Git 历史，与 `novel-studio` 源码仓库隔离。
+
+`configurationMode=collaborative` 时，Agent 应先给出一套推荐配置，邀请用户只修改
+关心的部分，再调用 `novel_init`；没有指定的字段由 AI 补齐。设为 `ai_managed`
+（默认）时，AI 根据题材、平台和目标读者选择完整配置并继续工作流。文风使用可观察
+参数组合，不依赖单一作者或作品名；旧项目没有这些字段时会使用兼容默认值。
+
+`serialMode` 与文风互相独立：`adaptive`（默认）按题材、平台和读者研究决定连载强度，
+`commercial_serial` 强化情绪承诺、期待差、行动反馈与连续成长，`custom` 使用用户给出的
+策略。方法论文档建议的“贴近主角第三人称”和“前六万字规划”不会覆盖项目既定选择：
+`openingPerspective=follow_project_style` 时始终服从文风视角；短篇的前期规划窗口自动缩到
+目标总字数以内。
+
+人物设定同时维护两类可追踪状态：`physical` 保存年龄、性别、身高、体重、外貌、
+服饰、装备和身体状况；`expression` 保存核心性格、说话风格和口癖。两者都使用
+`baseline/current/history`，Writer 只能在正文写出合理过程后申报阶段变化，后续章节与
+Reviewer 会读取同一份当前状态和变化履历。
+
+人物档案还记录社会身份、职业/学业职责、当前生活、短期和长期目标、思维方式、特殊
+能力及其边界/代价、已有和缺少资源。Chapter Contract 显式保存
+`reader_question → protagonist_action → external_feedback → state_delta → next_expectation`，
+避免把“配角震惊”误当反馈，也避免小剧情结束后人物身份、资源和关系全部恢复原样。
 
 ### 2. 自动模式（推荐）
 

@@ -42,6 +42,41 @@ test('initProject 创建完整目录树与简报', (t) => {
   assert.equal(artifacts[0].status, 'ACTIVE')
 })
 
+test('initProject 保存协作模式与可观察文风参数', (t) => {
+  const { projectDir } = makeProject(t, {
+    configurationMode: 'collaborative',
+    baseStyle: '简练',
+    narrativeDistance: '限知',
+    psychologyDensity: '低',
+    dialogueTone: '克制',
+    descriptionFocus: ['动作', '环境'],
+    pacingMode: 'active',
+    bannedWords: ['模板词'],
+    serialMode: 'commercial_serial',
+    coreEmotionalPromise: '专业能力被验证',
+    secondaryEmotionalPromises: ['伙伴认可'],
+    payoffCadence: '每3章一次局部兑现',
+    planningHorizonWords: 50000,
+    openingPerspective: 'close_third_person',
+  })
+  const project = getProject(projectDir)
+  assert.equal(project.brief.configurationMode, 'collaborative')
+  assert.equal(project.brief.writingStyle.baseStyle, '简练')
+  assert.deepEqual(project.brief.writingStyle.descriptionFocus, ['动作', '环境'])
+  assert.equal(project.brief.serialStrategy.mode, 'commercial_serial')
+  assert.equal(project.brief.serialStrategy.coreEmotionalPromise, '专业能力被验证')
+  assert.equal(project.brief.serialStrategy.planningHorizonWords, 50000)
+
+  const brief = readFileSync(join(projectDir, '00_project_brief.md'), 'utf8')
+  assert.match(brief, /协作配置（用户确认，AI 补齐）/)
+  assert.match(brief, /基础文风（只取一个主方案）：简练/)
+  assert.match(brief, /推进速度：active/)
+  assert.match(brief, /项目禁用词：模板词/)
+  assert.match(brief, /连载模式：商业连载强化/)
+  assert.match(brief, /核心情绪承诺：专业能力被验证/)
+  assert.match(brief, /贴近主角的第三人称/)
+})
+
 test('初始化简报 Artifact 也保存不可变 v1 正文', (t) => {
   const { projectDir } = makeProject(t, { title: '不可变简报' })
   const [meta] = getArtifacts(projectDir)

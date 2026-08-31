@@ -24,18 +24,64 @@ test('Reviewer schema 支持 chapter，且所有专业维度都可映射到 Chap
 
 test('人物 schema 要求并声明 pressurePoints 与 relations', () => {
   const schema = agents.ROLE_PERSONAS['character-growth-expert'].outputSchema.properties.characters.items
-  assert.ok(schema.required.includes('pressurePoints'))
-  assert.ok(schema.required.includes('relations'))
+  for (const field of [
+    'desire', 'fear', 'misbelief', 'personality', 'speechStyle', 'catchphrases', 'voice',
+    'socialIdentity', 'occupation', 'currentLife', 'shortTermGoal', 'longTermGoal',
+    'thinkingPattern', 'specialAbility', 'abilityBoundary', 'abilityCost', 'resources', 'missingResources',
+    'knowledgeBoundary', 'decisionLogic', 'age', 'gender', 'height', 'weight',
+    'appearance', 'clothing', 'equipment', 'physicalCondition', 'pressurePoints', 'relations',
+  ]) {
+    assert.ok(schema.required.includes(field), `人物 schema 缺少 ${field}`)
+  }
+  assert.equal(schema.properties.catchphrases.type, 'array')
+  assert.equal(schema.properties.resources.type, 'array')
+  assert.equal(schema.properties.missingResources.type, 'array')
+  assert.equal(schema.properties.equipment.type, 'array')
+  assert.equal(schema.properties.physicalCondition.type, 'array')
+  assert.equal(schema.properties.knowledgeBoundary.type, 'array')
   assert.equal(schema.properties.pressurePoints.type, 'array')
   assert.equal(schema.properties.relations.type, 'object')
 })
 
-test('Plot Contract schema 强制三个可为空的结构化数组', () => {
+test('Writer 状态申报支持外在与表达阶段变化', () => {
+  const schema = agents.ROLE_PERSONAS.writer.outputSchema.properties.stateChanges.properties.characters.items
+  assert.equal(schema.properties.physical.type, 'object')
+  assert.equal(schema.properties.expression.type, 'object')
+  assert.ok(schema.properties.physical.required.includes('changeReason'))
+  assert.ok(schema.properties.expression.required.includes('changeReason'))
+  assert.equal(schema.properties.physical.properties.equipment.type, 'array')
+  assert.equal(schema.properties.expression.properties.catchphrases.type, 'array')
+})
+
+test('设定、剧情与 Writer persona 装配对应方法模块', () => {
+  assert.match(agents.ROLE_PERSONAS['world-architect'].persona, /【世界观方法】/)
+  assert.match(agents.ROLE_PERSONAS['character-growth-expert'].persona, /【人物方法】/)
+  assert.match(agents.ROLE_PERSONAS['plot-architect'].persona, /【剧情方法】/)
+  assert.match(agents.ROLE_PERSONAS.writer.persona, /【正文方法】/)
+  assert.match(agents.ROLE_PERSONAS.writer.persona, /【连载叙事工程方法】/)
+  assert.match(agents.ROLE_PERSONAS.writer.persona, /自由间接引语/)
+  assert.match(agents.ROLE_PERSONAS.planner.persona, /configurationMode=collaborative/)
+  assert.match(agents.ROLE_PERSONAS.planner.persona, /configurationMode=ai_managed/)
+})
+
+test('Plot Contract schema 强制结构化数组与行动反馈闭环', () => {
   const schema = agents.ROLE_PERSONAS['plot-architect'].outputSchema.properties.contracts.items
   for (const field of ['characters', 'foreshadowing', 'forbidden_changes']) {
     assert.ok(schema.required.includes(field))
     assert.equal(schema.properties[field].type, 'array')
   }
+  for (const field of ['reader_question', 'protagonist_action', 'external_feedback', 'state_delta', 'next_expectation']) {
+    assert.ok(schema.required.includes(field))
+    assert.equal(schema.properties[field].type, 'string')
+  }
+})
+
+test('市场研究 schema 固化读者情绪承诺', () => {
+  const schema = agents.ROLE_PERSONAS['deep-researcher'].outputSchema
+  assert.ok(schema.required.includes('reader_promise'))
+  assert.deepEqual(schema.properties.reader_promise.required, [
+    'core_emotion', 'secondary_emotions', 'expectations', 'avoidances', 'payoff_cadence',
+  ])
 })
 
 test('研究角色可调用 web_search，且结构化输出保留来源字段', () => {
@@ -47,6 +93,7 @@ test('研究角色可调用 web_search，且结构化输出保留来源字段', 
   assert.ok(market.outputSchema.required.includes('sources'))
   assert.ok(market.outputSchema.properties.sources.items.required.includes('url'))
   assert.equal(research.outputSchema.properties.evidence.items.properties.sourceUrl.type, 'string')
+  assert.ok(agents.ROLE_PERSONAS['world-architect'].tools.allow.includes('novel_artifact_list'))
   assert.equal(agents.ROLE_PERSONAS.writer.tools.allow.includes('web_search'), false)
   assert.ok(agents.ROLE_PERSONAS.writer.tools.allow.includes('skill'))
   assert.match(agents.ROLE_PERSONAS.writer.persona, /humanizer-zh/)
@@ -111,6 +158,9 @@ test('spawnRoleAgent 将 profile 的已晋升改进装配进实际 persona', asy
   })
   assert.equal(captured.provider, 'spawn')
   assert.ok(captured.request.persona.includes('RUNTIME-INJECTION'))
+  assert.match(captured.request.persona, /Artifact 只读工具协议/)
+  assert.match(captured.request.persona, /02_canon_rules/)
+  assert.ok(captured.request.toolFilter.allow.includes('novel_artifact_list'))
 })
 
 test('personaOverride 只替换基础 persona，不绕过已晋升改进', async () => {

@@ -6,7 +6,7 @@
 | 原则 | 实现 |
 |---|---|
 | 1. 规划与执行分离；Writer 不擅自修改上游 Canon | 子代理只读（`agents.mjs` 中每个角色的 `tools: {allow:[只读]}`）；写回由编排层代做 |
-| 2. 专业分工 | 13 个角色 persona（`agents.mjs` ROLE_PERSONAS），Reviewer Pool 六路并行 |
+| 2. 专业分工 | 15 个角色 persona（`agents.mjs` ROLE_PERSONAS），Reviewer Pool 六路并行 |
 | 3. Gate = Hard Constraint + Weighted Score | `gates.mjs` runGate：权重面 + 一票否决 + 关键指标下限 |
 | 4. Reader/Reviewer 先根因分析再返工 | `novel_diagnose`（症状→根因）→ `novel_rework_execute`（执行）两步分离 |
 | 5. 上游修改必须做依赖图影响分析 | `DEPENDENCY_CHAIN`（store.mjs）+ `markDependentsStale` / `dependencyImpact`（§14） |
@@ -15,26 +15,32 @@
 
 ## 逐节映射
 
-- **§3 总体架构**：`novel_autopilot`（operators.mjs）按项目状态机自动推进：
+- **§3 总体架构**：`novel_autopilot`（`operator-autopilot.mjs`，由 `operators.mjs` 注册）按项目状态机自动推进：
   研究 → 设定 → 剧情 → 写作 → 审查 → 读者验证 → 诊断/返工 → 汇报。
 - **§4 Agent 组织**：`agents.mjs` ROLE_PERSONAS——planner / deep-researcher /
   research-assistant / world-architect / character-growth-expert / numeric-expert /
   plot-architect / hook-designer / writer / continuity-checker / reviewer /
   reader-instance / diagnosis-analyst / learning-analyst / hr-reviewer。
-- **§5 Phase 0**：`novel_init` → `00_project_brief.md`（含禁止事项与用户硬约束）。
+- **§5 Phase 0**：`novel_init` → `00_project_brief.md`（含协作/AI 托管配置方式、可观察文风参数、连载叙事策略、禁止事项与用户硬约束）；`writing-methodology.mjs` 统一提供世界观、人物、剧情、正文、连载工程和审查方法。连载策略通过 `adaptive/commercial_serial/custom` 调节，不覆盖项目明确的视角、篇幅与文风。
 - **§6 Phase 1**：`novel_phase_research`（Step1/2，使用 `web_search`，Fact/Inference/
-  Assumption 分级并保留来源 URL → `research/evidence_index.md`）与
+  Assumption 分级并保留来源 URL，同时在 `01_market_strategy.md` 固化目标读者、核心/辅助
+  情绪承诺、期待/厌恶点、兑现频率及可选书名简介承诺 → `research/evidence_index.md`）与
   `novel_phase_setting`（Step3/4/5 三路并行 →
-  `02_world_bible.md` / `characters/` / `03_system_rules.md` / character_state）。
+  `02_world_bible.md` / `characters/` / `03_system_rules.md` / character_state）。人物状态把
+  外貌/服饰/装备/身体状况与性格/说话风格/口癖分别保存为
+  `physical`、`expression` 的 baseline/current/history，Writer 申报变化，Reviewer 校验因果与连续性；
+  人物静态档案还记录社会身份、职业、当前生活、短期/长期目标、思维方式、能力边界/代价及资源缺口。
 - **§7 Planning Gate**：`GATE_CONFIGS.planning`（世界观15/情节15/人物10/数值10/
   研究10/Planner10/其他30，通过线 70）；一票否决五类在 `vetoDimensions` +
   `phaseSetting` 的 planner 角色评审后自动执行。
-- **§8 Phase 2 剧情工程**：`novel_phase_plot`（Book→Volume→Chapter 分层，禁止跳级）。
-- **§10 Context Builder**：`buildWriterContext`（operators.mjs）——Global Canon +
-  人物状态 + 卷目标 + Chapter Contract + 最近章节摘要 + 待回收伏笔 + 风格规范 + 禁止事项。
+- **§8 Phase 2 剧情工程**：`novel_phase_plot`（Book→Volume→Chapter 分层，禁止跳级）；初次总纲包含一句话故事与可配置的前期三阶段窗口。Chapter Contract 在原有剧情字段之外强制保存 `reader_question/protagonist_action/external_feedback/state_delta/next_expectation`，把动作、反应、状态变化与下一轮期待变成可审查协议。
+- **§10 Context Builder**：`buildWriterContext`（`operator-production.mjs`）——Global Canon +
+  人物状态 + 卷目标 + Chapter Contract + 最近章节摘要与正文末段 + 待回收伏笔 +
+  可观察文风参数 + 连载叙事策略与市场情绪承诺 + 禁用词/高频手法 + 禁止事项。
 - **§11 专业审查**：`novel_review_run`——六路 Reviewer（剧情/人设/世界观·数值/
   连续性/文笔·事实/伏笔），问题统一结构化（issue_id/severity/evidence/expected/
-  actual/possible_source/recommended_action），Reviewer 不改作品。
+  actual/possible_source/recommended_action），Reviewer 不改作品；审查明确检查核心情绪兑现、
+  主角能动性、真实外部反馈、不可逆状态变化、前后剧情因果和功能性细节。
 - **§12 Reader Lab**：`novel_reader_lab_run`——Persona 池默认 学生40%/上班族35%/
   核心20%/资深5%，确定性抽样；行为数据（完读/跳读/弃书点/下一章意愿/伏笔记忆/
   爽点兑现/情绪）；Reader Gate 含 Persona 崩塌与红线一票否决。

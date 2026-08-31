@@ -13,6 +13,9 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, renameSync, readdirSync, statSync, rmSync } from 'node:fs'
 import { createHash, randomUUID } from 'node:crypto'
 import { join, dirname, relative, basename } from 'node:path'
+import {
+  normalizeSerialStrategy, normalizeWritingStyle, renderSerialStrategy, renderWritingStyle,
+} from './writing-methodology.mjs'
 
 /* ================================================================== 常量 */
 
@@ -251,6 +254,9 @@ export function initProject(opts) {
       referenceWorks: brief.referenceWorks || [],
       forbiddenItems: brief.forbiddenItems || [],
       hardConstraints: brief.hardConstraints || [],
+      configurationMode: brief.configurationMode === 'collaborative' ? 'collaborative' : 'ai_managed',
+      writingStyle: normalizeWritingStyle(brief),
+      serialStrategy: normalizeSerialStrategy(brief),
     },
     workflow: {
       state: 'INIT', // PROJECT_STATES
@@ -351,6 +357,15 @@ export function renderProjectBrief(project) {
     '',
     '## 参考作品',
     b.referenceWorks.length ? b.referenceWorks.map(r => `- ${r}`).join('\n') : '- （无）',
+    '',
+    '## 创作配置',
+    `- 配置方式：${b.configurationMode === 'collaborative' ? '协作配置（用户确认，AI 补齐）' : 'AI 托管（AI 自动选择并保持一致）'}`,
+    '',
+    '### 可观察文风参数',
+    renderWritingStyle(b),
+    '',
+    '### 连载叙事策略',
+    renderSerialStrategy(b),
     '',
     '## 禁止事项（用户硬约束）',
     b.forbiddenItems.length ? b.forbiddenItems.map(r => `- ${r}`).join('\n') : '- （无）',

@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 import { canonicalMutationKey, registerNovelTools } from '../plugin/operators.mjs'
+import { artifactReadManifest } from '../plugin/operator-common.mjs'
+import { buildWriterContext } from '../plugin/operator-production.mjs'
 import {
   addIssue,
   addChapterContracts,
@@ -16,6 +18,7 @@ import {
   initProject,
   listGates,
   listIssues,
+  loadCharacterState,
   loadContracts,
   loadStoryState,
   recordGate,
@@ -24,6 +27,7 @@ import {
   setChapterState,
   setWorkflowState,
   writeArtifact,
+  writeState,
 } from '../plugin/store.mjs'
 
 function contract(chapter, title = `标题${chapter}`) {
@@ -36,15 +40,62 @@ function contract(chapter, title = `标题${chapter}`) {
     characters: [],
     entry_state: '进入',
     chapter_goal: '推进测试目标',
+    reader_question: '主角能否推进测试目标',
     conflict: '测试冲突',
     turning_point: '测试转折',
+    protagonist_action: '主角采取测试行动',
+    external_feedback: '相关人物调整资源与态度',
     payoff: '测试兑现',
     emotional_curve: '平静到紧张',
     information_revealed: '测试信息',
     foreshadowing: [],
     end_hook: '测试钩子',
     exit_state: '离开',
+    state_delta: '主角获得新信息并改变下一步目标',
+    next_expectation: '新信息将如何影响下一步行动',
     forbidden_changes: [],
+  }
+}
+
+function characterProfile(overrides = {}) {
+  return {
+    id: 'hero',
+    name: '主角',
+    role: '主角',
+    motive: '求真',
+    desire: '找到真相并保住现有关系',
+    fear: '因自己的选择再次失去重要的人',
+    misbelief: '只要独自承担就不会伤害别人',
+    socialIdentity: '普通高中二年级学生，在班级中缺少正式话语权',
+    occupation: '高中生，兼任校报摄影志愿者',
+    currentLife: '白天上课，课余调查校园旧闻，同时维持表面平静的同学关系',
+    shortTermGoal: '在本周内确认旧仓库异常的来源',
+    longTermGoal: '查清过去事件真相并学会与同伴共同承担风险',
+    thinkingPattern: '先比对细节和利益关系，再用低风险试探排除错误解释',
+    specialAbility: '对现场细节和叙述矛盾格外敏感',
+    abilityBoundary: '只能发现不一致，不能直接知道真相，也会被刻意伪造误导',
+    abilityCost: '持续调查会消耗时间、信誉并增加同伴被牵连的风险',
+    resources: ['校报资料室权限', '旧款手机'],
+    missingResources: ['旧仓库钥匙', '可信的内部证人'],
+    personality: '克制、敏锐，但在亲近关系中容易过度承担',
+    speechStyle: '短句、少解释；紧张时先反问再给答案',
+    catchphrases: ['先等等'],
+    voice: '短句、少解释；紧张时会先反问',
+    knowledgeBoundary: ['知道校园现状', '不知道幕后人的身份'],
+    decisionLogic: '求真欲推动行动，失去关系的恐惧使其先试探再下注',
+    age: '17岁（高二上学期开篇）',
+    gender: '男',
+    height: '178厘米',
+    weight: '约65公斤，清瘦',
+    appearance: '黑色短发，眉骨略高，左眉尾有浅痕',
+    clothing: '白色校服上衣、深色长裤、旧球鞋',
+    equipment: ['学生证', '旧款手机'],
+    physicalCondition: [],
+    arc: ['从独自承担到学会信任'],
+    initial_state: '起点',
+    pressurePoints: ['同伴因其隐瞒受伤'],
+    relations: {},
+    ...overrides,
   }
 }
 
@@ -101,6 +152,7 @@ function makeTools(structuredFor = async () => undefined) {
   registerNovelTools(ctx)
   const exec = { agent: { id: 'operator-test-parent' }, signal: new AbortController().signal }
   return {
+    definitions,
     requests,
     async call(name, args) {
       const definition = definitions.get(name)
@@ -188,6 +240,59 @@ test('novel_chapter_read 统一数字章节号，并兼容旧的带标题手稿�
   assert.match(result.manuscript, /旧版正文/)
 })
 
+test('novel_artifact_read 把初期未生成资产返回为可发现结果而非 Tool call Error', async t => {
+  const projectDir = makeProject(t)
+  const tools = makeTools()
+
+  const missing = await tools.call('novel_artifact_read', { projectDir, artifactId: '02' })
+
+  assert.equal(missing.found, false)
+  assert.equal(missing.requestedArtifactId, '02')
+  assert.deepEqual(missing.availableArtifactIds, ['00_project_brief'])
+  assert.match(missing.hint, /artifact id 必须使用完整精确值/)
+
+  const existing = await tools.call('novel_artifact_read', {
+    projectDir,
+    artifactId: '00_project_brief',
+    section: '题材与类型',
+    maxChars: 200,
+  })
+  assert.equal(existing.found, true)
+  assert.match(existing.content, /^## 题材与类型/m)
+
+  const missingSection = await tools.call('novel_artifact_read', {
+    projectDir,
+    artifactId: '00_project_brief',
+    section: 'Canon Rules',
+  })
+  assert.equal(missingSection.found, true)
+  assert.equal(missingSection.sectionFound, false)
+  assert.ok(missingSection.availableSections.includes('题材与类型'))
+
+  await assert.rejects(
+    tools.call('novel_artifact_read', { projectDir, artifactId: '02_world_bible', required: true }),
+    /不存在 artifact 02_world_bible/,
+  )
+
+  const parameters = tools.definitions.get('novel_artifact_read').parameters.properties
+  assert.equal(parameters.section.type, 'string')
+  assert.equal(parameters.maxChars.type, 'number')
+  assert.equal(parameters.version.type, 'number')
+  assert.equal(parameters.required.type, 'boolean')
+})
+
+test('Artifact 上下文注入显式区分已存在输入与本阶段待生成输出', t => {
+  const projectDir = makeProject(t)
+  const manifest = artifactReadManifest(projectDir, {
+    stageOutputs: ['02_world_bible', 'characters', '03_system_rules'],
+  })
+
+  assert.match(manifest, /当前存在的完整 Artifact ID：00_project_brief/)
+  assert.match(manifest, /当前不存在：02_world_bible, characters, 03_system_rules/)
+  assert.match(manifest, /不要尝试读取它们/)
+  assert.match(manifest, /Markdown 小节用 section 参数/)
+})
+
 test('研究阶段拒绝写入没有来源的 Fact', async t => {
   const projectDir = makeProject(t)
   const tools = makeTools(async request => {
@@ -196,6 +301,10 @@ test('研究阶段拒绝写入没有来源的 Fact', async t => {
         market: '市场分析',
         differentials: ['差异点'],
         reader_persona: [{ segment: '核心读者', ratio: 1, traits: '测试' }],
+        reader_promise: {
+          core_emotion: '能力被验证', secondary_emotions: ['关系升温'],
+          expectations: ['连续行动反馈'], avoidances: ['无效震惊'], payoff_cadence: '每3章一次局部兑现',
+        },
         strategy: '连载策略',
         assumptions: [],
         sources: [{ title: '有效来源', url: 'https://example.com/market' }],
@@ -217,6 +326,28 @@ test('研究阶段拒绝写入没有来源的 Fact', async t => {
   assert.equal(getArtifacts(projectDir).some(row => row.id === '01_market_strategy'), false)
 })
 
+test('研究阶段拒绝缺少读者情绪承诺的市场策略', async t => {
+  const projectDir = makeProject(t)
+  const tools = makeTools(async request => {
+    if (request.label === '市场需求分析') {
+      return {
+        market: '市场分析', differentials: ['差异点'],
+        reader_persona: [{ segment: '核心读者', ratio: 1, traits: '测试' }],
+        strategy: '连载策略', assumptions: [],
+        sources: [{ title: '有效来源', url: 'https://example.com/market' }],
+      }
+    }
+    if (request.label === '深度资料研究') return { evidence: [], topics: ['测试专题'] }
+    throw new Error(`意外子代理任务: ${request.label}`)
+  })
+
+  await assert.rejects(
+    tools.call('novel_phase_research', { projectDir }),
+    /缺少可执行的读者情绪承诺.*reader_promise 缺失/,
+  )
+  assert.equal(getArtifacts(projectDir).some(row => row.id === '01_market_strategy'), false)
+})
+
 test('Planning 非法评分在任何设定资产写入或 ACTIVE 变更前 fail closed', async t => {
   const projectDir = makeProject(t)
   for (const id of ['02_world_bible', 'characters', '03_system_rules']) {
@@ -228,7 +359,7 @@ test('Planning 非法评分在任何设定资产写入或 ACTIVE 变更前 fail 
     if (request.label === '世界观架构') return { canon_rules: ['规则一'], world_bible: '# 新世界观' }
     if (request.label === '人物设定') {
       return {
-        characters: [{ id: 'hero', name: '主角', role: '主角', motive: '求真', arc: ['成长'], initial_state: '起点' }],
+        characters: [characterProfile()],
         character_state: { characters: { hero: { name: '主角', current: { state: '起点' } } } },
       }
     }
@@ -246,6 +377,15 @@ test('Planning 非法评分在任何设定资产写入或 ACTIVE 变更前 fail 
     tools.call('novel_phase_setting', { projectDir }),
     /Planning Gate 分数非法.*未写入设定资产/,
   )
+
+  const settingPrompt = tools.requests.find(request => request.label === '世界观架构').prompt[0].text
+  assert.match(settingPrompt, /Artifact 可用性（宿主已核实）/)
+  assert.match(settingPrompt, /需要修订时可按完整 ID 读取：02_world_bible, characters, 03_system_rules/)
+  assert.match(settingPrompt, /以 02_world_bible 的 Canon Rules 为唯一权威/)
+  assert.doesNotMatch(settingPrompt, /以 02 之 Canon Rules/)
+  const gatePrompt = tools.requests.find(request => request.label === '规划资产评审（Planning Gate）').prompt[0].text
+  assert.match(gatePrompt, /尚未落盘的设定候选/)
+  assert.match(gatePrompt, /不要调用 novel_artifact_read 读取 02_world_bible、characters 或 03_system_rules/)
 
   assert.deepEqual(getArtifacts(projectDir), beforeArtifacts)
   assert.equal(existsSync(join(projectDir, 'characters', 'hero.md')), false)
@@ -271,6 +411,88 @@ test('Writer 在派发前进入 WRITING，成功后写 canonical 文件并进入
   assert.equal(loadContracts(projectDir).chapters['001'].status, 'QA')
   assert.equal(existsSync(join(projectDir, 'manuscript', 'chapters', '第001章.md')), true)
   assert.equal(existsSync(join(projectDir, 'manuscript', 'chapters', '第001章_标题1.md')), false)
+})
+
+test('Writer Context 注入可配置文风与近期正文样本', t => {
+  const projectDir = makeProject(t, {
+    chapters: [1, 2],
+    brief: {
+      configurationMode: 'collaborative',
+      baseStyle: '细腻',
+      narrativeDistance: '贴身主观',
+      pacingMode: 'slow',
+      bannedWords: ['某个禁词'],
+      serialMode: 'commercial_serial',
+      coreEmotionalPromise: '青春遗憾被重新修正',
+      payoffCadence: '每3章一次关系或能力反馈',
+      planningHorizonWords: 50000,
+    },
+  })
+  const previous = join(projectDir, 'manuscript', 'chapters', '第001章.md')
+  mkdirSync(join(projectDir, 'manuscript', 'chapters'), { recursive: true })
+  writeFileSync(previous, '# 第 1 章\n\n> POV: hero ｜ 地点: 操场 ｜ 时间: 黄昏\n\n旧操场边的风卷起粉笔灰。\n', 'utf8')
+
+  const { ctx } = buildWriterContext(projectDir, 2)
+
+  assert.match(ctx, /协作配置/)
+  assert.match(ctx, /基础文风（只取一个主方案）：细腻/)
+  assert.match(ctx, /叙事距离：贴身主观/)
+  assert.match(ctx, /推进速度：slow/)
+  assert.match(ctx, /项目禁用词：某个禁词/)
+  assert.match(ctx, /连载模式：商业连载强化/)
+  assert.match(ctx, /核心情绪承诺：青春遗憾被重新修正/)
+  assert.match(ctx, /前期规划窗口：50000 字/)
+  assert.match(ctx, /旧操场边的风卷起粉笔灰/)
+})
+
+test('Writer 申报人物外在与表达阶段变化并保留履历', async t => {
+  const projectDir = makeProject(t, { chapters: [1] })
+  writeState(projectDir, 'character', {
+    characters: {
+      hero: {
+        name: '主角',
+        state: 'initial',
+        current: { state: '起点', detail: '' },
+        relations: {},
+        arcs: {},
+        physical: {
+          baseline: { age: '17岁', gender: '男', height: '178厘米', weight: '65公斤', appearance: '黑色短发' },
+          current: { age: '17岁', height: '178厘米', weight: '65公斤', appearance: '黑色短发', clothing: '校服', equipment: ['学生证'], physicalCondition: [] },
+          history: [],
+        },
+        expression: {
+          baseline: { personality: '克制', speechStyle: '短句', catchphrases: ['先等等'] },
+          current: { personality: '克制', speechStyle: '短句', catchphrases: ['先等等'] },
+          history: [],
+        },
+      },
+    },
+  }, { reason: '测试人物初始状态' })
+  prepareProduction(projectDir)
+  const tools = makeTools(async request => {
+    if (request.label !== '写第001章') throw new Error(`意外子代理任务: ${request.label}`)
+    return {
+      manuscript: '他换下校服，把借来的钥匙收进口袋。那句常挂在嘴边的话，这次没有说。',
+      stateChanges: {
+        characters: [{
+          id: 'hero',
+          physical: { clothing: '深色夹克', equipment: ['学生证', '仓库钥匙'], changeReason: '正文写明换衣并借到钥匙' },
+          expression: { personality: '克制但开始主动信任同伴', speechStyle: '仍用短句，减少反问', catchphrases: [], changeReason: '共同承担风险后的阶段变化' },
+        }],
+      },
+      problems: [],
+    }
+  })
+
+  await tools.call('novel_writer_write_batch', { projectDir, chapters: [1] })
+  const hero = loadCharacterState(projectDir).characters.hero
+  assert.equal(hero.physical.current.clothing, '深色夹克')
+  assert.deepEqual(hero.physical.current.equipment, ['学生证', '仓库钥匙'])
+  assert.equal(hero.physical.history[0].chapter, 1)
+  assert.match(hero.physical.history[0].reason, /换衣并借到钥匙/)
+  assert.equal(hero.expression.current.speechStyle, '仍用短句，减少反问')
+  assert.deepEqual(hero.expression.current.catchphrases, [])
+  assert.equal(hero.expression.history[0].chapter, 1)
 })
 
 test('Writer 失败会留下可恢复的 REWORK 状态且不写半成品', async t => {
@@ -640,6 +862,31 @@ test('Plot 拒绝缺少三个结构化数组的 Chapter Contract', async t => {
   assert.equal(listGates(projectDir).some(row => row.gate === 'plot'), false)
 })
 
+test('Plot 拒绝缺少行动反馈闭环的 Chapter Contract', async t => {
+  const projectDir = makeProject(t, {
+    brief: { volumeCount: 1, chaptersPerVolume: 1, chaptersPerBatch: 1 },
+  })
+  const tools = makeTools(async request => {
+    if (request.label === '全书剧情规划') {
+      const candidate = contract(1)
+      delete candidate.reader_question
+      delete candidate.protagonist_action
+      delete candidate.external_feedback
+      delete candidate.state_delta
+      delete candidate.next_expectation
+      return { master_plot: '# 总纲', volumes: [{ volume: 1, plan: '# 卷纲' }], contracts: [candidate] }
+    }
+    throw new Error(`不完整契约不应进入后续任务: ${request.label}`)
+  })
+
+  await assert.rejects(
+    tools.call('novel_phase_plot', { projectDir }),
+    /contracts\[0\].*reader_question.*protagonist_action.*external_feedback.*state_delta.*next_expectation.*未进入 Plot Gate/,
+  )
+  assert.equal(tools.requests.length, 1)
+  assert.deepEqual(loadContracts(projectDir).order, [])
+})
+
 test('Plot 初次规划必须精确覆盖全部卷纲', async t => {
   const projectDir = makeProject(t, {
     brief: { volumeCount: 2, chaptersPerVolume: 1, chaptersPerBatch: 1 },
@@ -828,7 +1075,7 @@ test('上游返工按 setting → plot → writer 推进且不重复起点', asy
     seen.push(request.label)
     if (request.label === '世界观架构') return { canon_rules: ['规则'], world_bible: '# 新世界观' }
     if (request.label === '人物设定') return {
-      characters: [{ id: 'hero', name: '主角', role: '主角', motive: '求真', arc: ['成长'], initial_state: '初始', pressurePoints: ['压力'], relations: {} }],
+      characters: [characterProfile({ initial_state: '初始' })],
       character_state: { characters: {} },
     }
     if (request.label === '数值体系') return { system_rules: '# 新规则', red_lines: ['不可越界'] }
